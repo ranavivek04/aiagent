@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local runtime data and caches
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+.litellm-cache/
+.litellm_cache/

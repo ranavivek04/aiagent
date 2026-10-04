@@ -1,0 +1,8 @@
+[DOC_ID: 101] AUTHENTICATION SERVICE WORKFLOW
+The authentication infrastructure (auth-service) depends entirely on a PostgreSQL database cluster. If the database experiences a spike in connections, it throws a connection pool exhaustion error, which manifests in downstream services as an authorization failure and token validation loop timeout error.
+
+[DOC_ID: 102] PAYMENT GATEWAY DISPATCHER
+The payment gateway handles credit card validation routines. It communicates directly with external visa and mastercard clearing networks via secure TLS 1.3 endpoints.
+
+[DOC_ID: 103] MONITORING AND ALERTING METRICS
+The Prometheus monitoring system scrapes network telemetry data metrics every 15 seconds from all active kubernetes pods in the cluster, keeping track of error budgets and API request latency distributions.

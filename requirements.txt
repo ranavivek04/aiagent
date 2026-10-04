@@ -1,0 +1,9 @@
+chromadb
+aiosqlite
+fastapi
+httpx
+langgraph
+langgraph-checkpoint-sqlite
+pydantic
+typing-extensions
+uvicorn

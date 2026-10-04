@@ -1,0 +1,28 @@
+model_list:
+  # PRIMARY COMPUTE NODE
+  - model_name: enterprise-brain
+    litellm_params:
+      model: ollama/llama3.1
+      api_base: http://localhost:11434
+      rpm: 10 # Rate limit threshold: 10 Requests Per Minute
+      
+  # AUTOMATED FALLBACK BACKUP NODE
+  - model_name: enterprise-brain
+    litellm_params:
+      model: ollama/qwen2.5:1.5b
+      api_base: http://localhost:11434
+      rpm: 60
+
+router_settings:
+  # Routing Strategy: load-balance across available healthy worker models
+  routing_strategy: least-busy 
+  # Failover Controls
+  allowed_fails: 2
+  cooldown_time: 30 # Cooldown dead nodes for 30 seconds before retrying
+
+litellm_settings:
+  cache: true
+  cache_params:
+    type: disk
+    disk_cache_dir: C:\Users\Karuna\Documents\Vivek\aiagent\.litellm_cache
+
