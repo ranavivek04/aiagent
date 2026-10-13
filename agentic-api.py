@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import httpx
 import chromadb
 import uvicorn
@@ -19,7 +20,7 @@ from typing_extensions import TypedDict
 async def get_local_embedding_async(
     client: httpx.AsyncClient, text: str
 ) -> list[list[float]]:
-    url = "http://localhost:11434/api/embed"
+    url = "http://ollama-core:11434/api/embed"
     payload = {"model": "mxbai-embed-large", "input": text}
     response = await client.post(url, json=payload, timeout=30.0)
     return response.json()['embeddings']
@@ -33,7 +34,8 @@ def initialize_vector_store():
     chunks = [c.strip() for c in content.split("\n\n") if c.strip()]
     
     import urllib.request
-    url = "http://localhost:11434/api/embed"
+    ollama_host = os.environ.get("OLLAMA_HOST", "http://ollama-core:11434").rstrip("/")
+    url = f"{ollama_host}/api/embed"
     for index, chunk in enumerate(chunks):
         payload = {"model": "mxbai-embed-large", "input": chunk}
         req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
@@ -53,7 +55,7 @@ class AgentState(TypedDict):
     loop_count: int
 
 async def call_gateway_proxy(system_prompt: str, messages: list) -> str:
-    url = "http://localhost:4000/v1/chat/completions"
+    url = "http://litellm-gateway:4000/v1/chat/completions"
     formatted_messages = [{"role": "system", "content": system_prompt}]
     for msg in messages:
         if hasattr(msg, "content"):
@@ -76,7 +78,11 @@ async def call_gateway_proxy(system_prompt: str, messages: list) -> str:
     }
     
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
-        response = await client.post(url, json=payload, headers={"Authorization": "Bearer local-key"})
+        response = await client.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {os.environ['LITELLM_MASTER_KEY']}"},
+        )
         response.raise_for_status()
         result = response.json()
         try:

@@ -3,14 +3,14 @@ model_list:
   - model_name: enterprise-brain
     litellm_params:
       model: ollama/llama3.1
-      api_base: http://localhost:11434
+      api_base: http://ollama-core:11434
       rpm: 10 # Rate limit threshold: 10 Requests Per Minute
       
   # AUTOMATED FALLBACK BACKUP NODE
   - model_name: enterprise-brain
     litellm_params:
       model: ollama/qwen2.5:1.5b
-      api_base: http://localhost:11434
+      api_base: http://ollama-core:11434
       rpm: 60
 
 router_settings:
@@ -24,5 +24,4 @@ litellm_settings:
   cache: true
   cache_params:
     type: disk
-    disk_cache_dir: C:\Users\Karuna\Documents\Vivek\aiagent\.litellm_cache
-
+    disk_cache_dir: /app/.litellm-cache

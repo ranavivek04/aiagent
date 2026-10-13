@@ -1,0 +1,117 @@
+networks:
+  ai-mesh:
+    driver: bridge # Compiles an isolated virtual network space
+
+volumes:
+  ollama-models: # Durable volume sharding layer to preserve model weights on host
+
+services:
+  # 🤖 SERVICE 1: OLLAMA MODEL RUNTIME
+  ollama-core:
+    image: ollama/ollama:latest
+    container_name: ollama-core
+    volumes:
+      - ollama-models:/root/.ollama # Maps volume to preserve model data across restarts
+    networks:
+      - ai-mesh
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # 📥 SERVICE 2: AUTOMATED LOCAL MODEL BOOTSTRAPPER
+  # This transient container ensures models exist in the shared volume, then exits safely.
+  model-bootstrapper:
+    image: curlimages/curl:latest
+    container_name: model-bootstrapper
+    networks:
+      - ai-mesh
+    depends_on:
+      ollama-core:
+        condition: service_healthy
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        set -e
+        models=$(curl -fsS http://ollama-core:11434/api/tags)
+        if printf '%s' "$$models" | grep -Eq '"name"[[:space:]]*:[[:space:]]*"llama3\.1(:latest)?"'; then
+          echo 'Llama3.1 Reasoning Brain is already installed; skipping pull.'
+        else
+          echo 'Pulling Llama3.1 Reasoning Brain...'
+          curl -fsS -X POST http://ollama-core:11434/api/pull -d '{"name":"llama3.1"}'
+        fi
+        if printf '%s' "$$models" | grep -Eq '"name"[[:space:]]*:[[:space:]]*"mxbai-embed-large(:latest)?"'; then
+          echo 'Mixedbread Embedding Matrix is already installed; skipping pull.'
+        else
+          echo 'Pulling Mixedbread Embedding Matrix...'
+          curl -fsS -X POST http://ollama-core:11434/api/pull -d '{"name":"mxbai-embed-large"}'
+        fi
+        echo 'Infrastructure models successfully cached in shared volume.'
+
+  # 🛡️ SERVICE 3: LITELLM REVERSE PROXY GATEWAY
+  litellm-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
+    image: aiagent-litellm-gateway:main-stable
+    container_name: litellm-gateway
+    volumes:
+      - ./config.yaml:/app/config.yaml # Mounts your local config mapping parameters directly
+      - ./.litellm-cache:/app/.litellm-cache # Mounts cache workspace directory layout
+    ports:
+      - "4000:4000"
+    networks:
+      - ai-mesh
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env}
+    depends_on:
+      ollama-core:
+        condition: service_healthy
+      model-bootstrapper:
+        condition: service_completed_successfully
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # 📡 SERVICE 4: ARIZE PHOENIX OPENTELEMETRY TRACING SUITE
+  phoenix-observability:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix-observability
+    ports:
+      - "6006:6006" # Binds dashboard port directly to host machine
+    networks:
+      - ai-mesh
+
+  # 🌐 SERVICE 5: YOUR STATEFUL FASTAPI AGENT APPLICATION
+  agent-api-app:
+    build: .
+    container_name: agent-api-app
+    ports:
+      - "8000:8000" # Exposes your REST interface to the host OS
+    networks:
+      - ai-mesh
+    depends_on:
+      litellm-gateway:
+        condition: service_healthy
+      phoenix-observability:
+        condition: service_started
+      model-bootstrapper:
+        condition: service_completed_successfully
+    environment:
+      - OLLAMA_HOST=http://ollama-core:11434
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env}
+      - LITELLM_PROXY_URL=http://litellm-gateway:4000/v1
+      - PHOENIX_COLLECTOR_URL=http://phoenix-observability:6006/v1/traces
+      - ANONYMIZED_TELEMETRY=False

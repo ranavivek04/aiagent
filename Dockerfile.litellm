@@ -1,0 +1,5 @@
+FROM docker.litellm.ai/berriai/litellm:main-stable
+
+RUN /app/.venv/bin/python -m ensurepip --upgrade \
+    && /app/.venv/bin/python -m pip install --no-cache-dir diskcache==5.6.3 \
+    && /app/.venv/bin/python -c "import diskcache"
